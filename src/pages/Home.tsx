@@ -1,9 +1,10 @@
-import InstallMetaMask from "../components/interactive/InstallMetaMask"
+import CheckBalance from "../components/interactive/CheckBalance"
 
 const Home = () => {
   return (
     <div className="min-h-dvh flex items-center justify-center">
-      <InstallMetaMask />
+      <CheckBalance/>
+      
     </div>
   )
 }
