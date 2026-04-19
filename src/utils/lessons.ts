@@ -1,3 +1,5 @@
+import BlockChainBreak from '../components/interactive/BlockChainBreak';
+
 export interface Lesson {
   id: string;
   title: string;
@@ -9,12 +11,6 @@ export interface Lesson {
     correctIndex: number;
     explanation: string;
   }[];
-  web3Task?: {
-    type: 'swap' | 'mint' | 'sign' | 'deploy' | 'stake' | 'transfer';
-    title: string;
-    description: string;
-    steps: string[];
-  };
 }
 
 export const lessons: Lesson[] = [
@@ -31,17 +27,7 @@ export const lessons: Lesson[] = [
         correctIndex: 1,
         explanation: 'Web3 emphasizes decentralization and user ownership through blockchain.'
       }
-    ],
-    web3Task: {
-      type: 'sign',
-      title: 'Initialize Your Identity',
-      description: 'Sign a message with your wallet to prove you control your address.',
-      steps: [
-        'Open your digital wallet extension',
-        'Verify the message content: "Welcome to Web3Quest"',
-        'Click "Sign" to authorize the message'
-      ]
-    }
+    ]
   },
   {
     id: 'wallets-101',
@@ -97,18 +83,7 @@ export const lessons: Lesson[] = [
         correctIndex: 1,
         explanation: 'Gas refers to the fee required to execute transactions on the Ethereum network.'
       }
-    ],
-    web3Task: {
-      type: 'transfer',
-      title: 'Simulate a Transfer',
-      description: 'Send test tokens to a virtual recipient.',
-      steps: [
-        'Enter recipient address',
-        'Specify amount (0.1 Test ETH)',
-        'Adjust Gas preference (Normal/Fast)',
-        'Click "Send"'
-      ]
-    }
+    ]
   },
 
   // DEFI PHASE
@@ -139,17 +114,6 @@ export const lessons: Lesson[] = [
         explanation: 'ERC-20 is the standard for fungible tokens.'
       }
     ],
-    web3Task: {
-      type: 'swap',
-      title: 'Perform a Swap',
-      description: 'Exchange Token A for Token B on a DEX.',
-      steps: [
-        'Select "Swap" on the DEX interface',
-        'Choose "ETH" as input and "USDC" as output',
-        'Approve the DEX to spend your ETH',
-        'Confirm the Swap transaction'
-      ]
-    }
   },
   {
     id: 'liquidity-pools',
@@ -178,17 +142,6 @@ export const lessons: Lesson[] = [
         explanation: 'PoS uses stake instead of mining power to secure the network.'
       }
     ],
-    web3Task: {
-      type: 'stake',
-      title: 'Lock for Rewards',
-      description: 'Stake tokens in a secure vault.',
-      steps: [
-        'Connect your dashboard',
-        'Select the "Staking Pool"',
-        'Enter amount to lock',
-        'Sign the "Lock" transaction'
-      ]
-    }
   },
   {
     id: 'stablecoins',
@@ -219,17 +172,6 @@ export const lessons: Lesson[] = [
         explanation: 'Each NFT is unique (ID-based).'
       }
     ],
-    web3Task: {
-      type: 'mint',
-      title: 'Mint a Test Certificate',
-      description: 'Create your first digital asset.',
-      steps: [
-        'Upload your asset data (metadata)',
-        'Click "Mint" button',
-        'Wait for block confirmation',
-        'View your asset in "Inventory"'
-      ]
-    }
   },
   {
     id: 'nft-marketplaces',
@@ -288,3 +230,4 @@ export const lessons: Lesson[] = [
     ]
   }
 ];
+

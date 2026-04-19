@@ -12,6 +12,30 @@ import { CheckCircle, Lock, Play, ArrowLeft, ArrowRight, Sparkles, Wallet } from
 import { cn } from '@/src/utils/utils';
 import { unlockAchievement } from '@/src/services/achievementsService';
 
+// Interactive Components Imports
+import BlockChainBreak from '@/src/components/interactive/BlockChainBreak';
+import InstallMetaMask from '@/src/components/interactive/InstallMetaMask';
+import PrivateKeyChaos from '@/src/components/interactive/PrivateKeyChaos';
+import CheckHelaConnection from '@/src/components/interactive/CheckHelaConnection';
+import WalletCreateAndConnect from '@/src/components/interactive/WalletCreateAndConnect';
+import WalletAddress from '@/src/components/interactive/WalletAddress';
+import CheckBalance from '@/src/components/interactive/CheckBalance';
+import SendToSelf from '@/src/components/interactive/SendToSelf';
+import SendToUs from '@/src/components/interactive/SendToUs';
+import { Link } from 'react-router-dom';
+
+const INTERACTIVE_COMPONENTS: Record<string, React.ComponentType> = {
+  'intro-to-web3': BlockChainBreak,
+  'wallets-101': InstallMetaMask,
+  'private-keys-security': PrivateKeyChaos,
+  'blockchain-networks': CheckHelaConnection,
+  'transactions-tx': WalletCreateAndConnect,
+  'defi-overview': WalletAddress,
+  'tokens-and-swaps': CheckBalance,
+  'liquidity-pools': SendToSelf,
+  'staking-yield': SendToUs,
+};
+
 export default function Learn() {
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
   const { user, setUser } = useUser();
@@ -20,47 +44,40 @@ export default function Learn() {
   const [isLocked, setIsLocked] = useState(false);
   const [showTask, setShowTask] = useState(false);
   const [lessonComplete, setLessonComplete] = useState(false);
-
-  const [completedSteps, setCompletedSteps] = useState<number[]>([]);
-
-  const toggleStep = (idx: number) => {
-    if (completedSteps.includes(idx)) {
-      setCompletedSteps(completedSteps.filter(s => s !== idx));
-    } else {
-      setCompletedSteps([...completedSteps, idx]);
-    }
-  };
-
-  const isTaskReady = !selectedLesson?.web3Task || completedSteps.length === selectedLesson.web3Task.steps.length;
+  const [showConfirmPopup, setShowConfirmPopup] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const InteractiveComponent = selectedLesson ? INTERACTIVE_COMPONENTS[selectedLesson.id] : null;
 
   const handleCompleteLesson = async () => {
-    if (!user || !selectedLesson) return;
-    
+    if (!user || !selectedLesson || isSubmitting) return;
+    setIsSubmitting(true);
+
     const isAlreadyCompleted = user.completed_lessons.includes(selectedLesson.id);
-    const newCompleted = isAlreadyCompleted 
-      ? user.completed_lessons 
+    const newCompleted = isAlreadyCompleted
+      ? user.completed_lessons
       : [...user.completed_lessons, selectedLesson.id];
-    
+
     const xpReward = isAlreadyCompleted ? 0 : 100;
+    const oldLevel = user.level;
     const newXp = user.xp + xpReward;
     const newLevel = Math.floor(newXp / 1000) + 1;
 
     try {
       const userDocRef = doc(db, 'users', user.id);
-      await updateDoc(userDocRef, { 
+      await updateDoc(userDocRef, {
         completed_lessons: newCompleted,
         xp: newXp,
         level: newLevel
       });
-      
+
       setUser({
         ...user,
         completed_lessons: newCompleted,
         xp: newXp,
         level: newLevel
       });
+      setShowConfirmPopup(false);
       setLessonComplete(true);
-      setCompletedSteps([]); // Reset steps
 
       // Achievement Logic
       if (!isAlreadyCompleted) {
@@ -68,30 +85,28 @@ export default function Learn() {
           await unlockAchievement(user.id, 'web3-beginner');
         }
         if (newCompleted.length >= 10) {
-          await unlockAchievement(user.id, 'streak-7'); // Using this for 10 modules
-        }
-        if (selectedLesson.web3Task?.type === 'swap') {
-          await unlockAchievement(user.id, 'first-swap');
-        }
-        if (selectedLesson.web3Task?.type === 'mint') {
-          await unlockAchievement(user.id, 'nft-creator');
+          await unlockAchievement(user.id, 'streak-7');
         }
       }
     } catch (error) {
       console.error('Error updating lesson progress:', error);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   if (selectedLesson) {
     const question = selectedLesson.questions[currentQuestionIdx];
-    const progress = ((currentQuestionIdx + (showTask ? 1 : 0)) / (selectedLesson.questions.length + (selectedLesson.web3Task ? 1 : 0))) * 100;
+    const hasInteractive = !!INTERACTIVE_COMPONENTS[selectedLesson.id];
+    const progress = ((currentQuestionIdx + (showTask ? 1 : 0)) / (selectedLesson.questions.length + (hasInteractive ? 1 : 0))) * 100;
 
     return (
-      <div className="max-w-4xl mx-auto px-8 py-12">
+      <div className=" px-20 py-10">
         <Button variant="ghost" className="mb-8 pl-0 hover:bg-transparent text-brand-text-muted hover:text-brand-ink" onClick={() => setSelectedLesson(null)}>
           <ArrowLeft size={18} className="mr-2" /> Back to Curriculum
         </Button>
 
+        {/* Progress Bar */}
         <div className="mb-12 space-y-4">
           <div className="flex justify-between items-end">
             <div>
@@ -122,7 +137,7 @@ export default function Learn() {
                 correctIdx={isLocked ? question.correctIndex : undefined}
                 isLocked={isLocked}
               />
-              
+
               {isLocked && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
@@ -135,7 +150,7 @@ export default function Learn() {
                       setCurrentQuestionIdx(prev => prev + 1);
                       setSelectedAnswer(undefined);
                       setIsLocked(false);
-                    } else if (selectedLesson?.web3Task && !showTask) {
+                    } else if (hasInteractive && !showTask) {
                       setShowTask(true);
                     } else {
                       handleCompleteLesson();
@@ -148,87 +163,215 @@ export default function Learn() {
             </motion.div>
           ) : showTask && !lessonComplete ? (
             <motion.div
-               key="task"
-               initial={{ opacity: 0, x: 20 }}
-               animate={{ opacity: 1, x: 0 }}
-               className="space-y-8"
+              key="task"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="space-y-8"
             >
-               <Card className="p-10 border-2 border-dashed border-indigo-200 bg-indigo-50/20 shadow-inner">
-                  <div className="flex items-center gap-3 mb-6 text-brand-primary">
-                    <Sparkles size={28} className="animate-pulse" />
-                    <h2 className="text-xl font-black uppercase tracking-widest">Web3 Mission</h2>
+              <Card className="p-10 border-2 border-dashed border-brand-primary/20 bg-brand-primary/5 shadow-inner overflow-hidden relative">
+                <div className="absolute top-0 right-0 p-4">
+                  <div className="flex items-center gap-2 bg-brand-primary/10 text-brand-primary px-3 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase">
+                    Final Objective
                   </div>
-                  <h3 className="text-3xl font-bold mb-3 text-brand-ink">{selectedLesson.web3Task?.title}</h3>
-                  <p className="text-lg text-brand-text-muted mb-10 leading-relaxed">{selectedLesson.web3Task?.description}</p>
-                  
-                  <div className="space-y-4 mb-10">
-                    <div className="text-xs font-bold text-brand-text-muted uppercase tracking-widest mb-4">Step-by-Step Instructions</div>
-                    {selectedLesson.web3Task?.steps.map((step, idx) => (
-                      <div 
-                        key={idx} 
-                        onClick={() => toggleStep(idx)}
-                        className={cn(
-                          "flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer",
-                          completedSteps.includes(idx) 
-                            ? "bg-green-50 border-brand-success text-brand-ink" 
-                            : "bg-white border-brand-border hover:border-indigo-200"
-                        )}
-                      >
-                         <div className={cn(
-                           "w-6 h-6 rounded-md flex items-center justify-center border-2 transition-colors",
-                           completedSteps.includes(idx) ? "bg-brand-success border-brand-success text-white" : "border-gray-200"
-                         )}>
-                            {completedSteps.includes(idx) && <CheckCircle size={14} />}
-                         </div>
-                         <span className="text-sm font-semibold">{step}</span>
-                      </div>
-                    ))}
-                  </div>
+                </div>
 
-                  <div className="bg-white p-10 rounded-2xl border border-indigo-100 shadow-xl text-center">
-                     <div className="w-16 h-16 bg-indigo-50 text-brand-primary rounded-full flex items-center justify-center mx-auto mb-6">
+                <div className="flex items-center gap-3 mb-6 text-brand-primary">
+                  <Sparkles size={28} className="animate-pulse" />
+                  <h2 className="text-xl font-black uppercase tracking-widest">Web3 Mission</h2>
+                </div>
+
+                <div className="mb-10 min-h-[400px] flex items-center justify-center bg-white rounded-2xl border border-indigo-100 shadow-xl p-8 transition-all hover:shadow-2xl hover:border-brand-primary/30">
+                  {InteractiveComponent ? (
+                    <InteractiveComponent />
+                  ) : (
+                    <div className="text-center space-y-4">
+                      <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto text-gray-300">
                         <Wallet size={32} />
-                     </div>
-                     <p className={cn(
-                       "text-xs font-bold mb-6 uppercase tracking-widest",
-                       isTaskReady ? "text-brand-success" : "text-brand-text-muted opacity-50"
-                     )}>
-                        {isTaskReady ? 'System Ready: Proceed to Execution' : `Complete ${selectedLesson.web3Task?.steps.length! - completedSteps.length} more steps`}
-                     </p>
-                     <Button 
-                      size="xl" 
-                      className="w-full md:w-auto px-16 shadow-lg shadow-indigo-200" 
-                      onClick={() => handleCompleteLesson()}
-                      disabled={!isTaskReady}
-                    >
-                        Execute Mission
-                     </Button>
-                  </div>
-               </Card>
+                      </div>
+                      <p className="text-brand-text-muted font-medium italic">Interactive task module loading...</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="text-center">
+                  <Button
+                    size="xl"
+                    className="px-20 py-8 text-lg rounded-2xl shadow-xl shadow-brand-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                    onClick={() => setShowConfirmPopup(true)}
+                  >
+                    Success: Complete Mission
+                  </Button>
+                </div>
+              </Card>
             </motion.div>
           ) : (
             <motion.div
-               key="complete"
-               initial={{ opacity: 0, scale: 0.9 }}
-               animate={{ opacity: 1, scale: 1 }}
-               className="text-center py-20"
+              key="complete"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-white/20 backdrop-blur-xl p-4"
             >
-               <div className="w-24 h-24 bg-brand-success/10 text-brand-success rounded-full flex items-center justify-center mx-auto mb-8 relative">
-                  <CheckCircle size={48} />
+              {/* Confetti Elements */}
+              {Array.from({ length: 40 }).map((_, i) => (
+                <motion.div
+                  key={i}
+                  initial={{
+                    top: '50%',
+                    left: '50%',
+                    scale: 0,
+                    rotate: 0,
+                    opacity: 1
+                  }}
+                  animate={{
+                    top: `${Math.random() * 100}%`,
+                    left: `${Math.random() * 100}%`,
+                    scale: Math.random() * 1.5,
+                    rotate: Math.random() * 360,
+                    opacity: 0
+                  }}
+                  transition={{
+                    duration: 1.5 + Math.random(),
+                    ease: "easeOut",
+                    delay: i * 0.02
+                  }}
+                  className={cn(
+                    "absolute w-3 h-3 rounded-sm z-0",
+                    ["bg-brand-primary", "bg-brand-secondary", "bg-brand-success", "bg-yellow-400", "bg-pink-400"][i % 5]
+                  )}
+                />
+              ))}
+
+              <motion.div
+                initial={{ scale: 0.8, y: 50, opacity: 0 }}
+                animate={{ scale: 1, y: 0, opacity: 1 }}
+                className="relative z-10 w-full max-w-xl bg-white border border-brand-border rounded-[40px] p-12 shadow-[0_32px_128px_rgba(0,0,0,0.15)] text-center overflow-hidden"
+              >
+                {/* Success Ring */}
+                <div className="mb-10 relative">
                   <motion.div
                     initial={{ scale: 0 }}
-                    animate={{ scale: 1.5, opacity: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.2, type: "spring" }}
+                    className="w-28 h-28 bg-brand-success text-white rounded-full flex items-center justify-center mx-auto shadow-2xl shadow-brand-success/30 relative z-10"
+                  >
+                    <CheckCircle size={56} strokeWidth={3} />
+                  </motion.div>
+                  <motion.div
+                    animate={{ scale: [1, 1.5], opacity: [0.5, 0] }}
                     transition={{ duration: 1, repeat: Infinity }}
-                    className="absolute inset-0 bg-brand-success/20 rounded-full"
+                    className="absolute inset-0 bg-brand-success rounded-full flex items-center justify-center scale-0"
                   />
-               </div>
-               <h2 className="text-5xl font-black mb-3 uppercase tracking-tighter text-brand-ink">Lesson Complete!</h2>
-               <p className="text-lg text-brand-text-muted mb-12">+100 XP awarded to your profile</p>
-               <Button size="xl" className="px-12 py-8 text-xl rounded-2xl" onClick={() => setSelectedLesson(null)}>
-                  Keep Exploring
-               </Button>
+                </div>
+
+                <motion.h2
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.3 }}
+                  className="text-5xl font-black mb-4 uppercase tracking-tighter text-brand-ink"
+                >
+                  Mission Accomplished
+                </motion.h2>
+
+                <motion.p
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.4 }}
+                  className="text-xl text-brand-text-muted mb-10"
+                >
+                  You've mastered <b>{selectedLesson.title}</b>.
+                </motion.p>
+
+                {/* Reward Cards */}
+                <div className="grid grid-cols-2 gap-4 mb-12">
+                  <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.5 }}
+                    className="bg-brand-primary/5 border border-brand-primary/10 rounded-3xl p-6"
+                  >
+                    <div className="text-[10px] font-bold text-brand-primary uppercase tracking-widest mb-1">XP Earned</div>
+                    <div className="text-3xl font-black text-brand-ink">+100</div>
+                  </motion.div>
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.6 }}
+                    className="bg-indigo-50 border border-indigo-100 rounded-3xl p-6"
+                  >
+                    <div className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-1">Current Level</div>
+                    <div className="text-3xl font-black text-brand-ink">{user?.level}</div>
+                  </motion.div>
+                </div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.7 }}
+                >
+                  <Button
+                    size="xl"
+                    className="w-full py-8 text-xl rounded-2xl shadow-lg shadow-brand-primary/20 group"
+                    onClick={() => {
+                      setSelectedLesson(null);
+                      setLessonComplete(false);
+                      setShowTask(false);
+                      setCurrentQuestionIdx(0);
+                      setSelectedAnswer(undefined);
+                      setIsLocked(false);
+                    }}
+                  >
+                    Continue Exploring
+                    <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
+                  </Button>
+                </motion.div>
+              </motion.div>
             </motion.div>
           )}
+
+          {/* Confirmation Popup */}
+          <AnimatePresence>
+            {showConfirmPopup && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+              >
+                <motion.div
+                  initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                  animate={{ scale: 1, opacity: 1, y: 0 }}
+                  exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                  className="w-full max-w-md bg-white rounded-[32px] p-8 shadow-2xl border border-brand-border"
+                >
+                  <div className="w-16 h-16 bg-brand-primary/10 text-brand-primary rounded-2xl flex items-center justify-center mb-6">
+                    <Sparkles size={32} />
+                  </div>
+                  <h3 className="text-2xl font-bold text-brand-ink mb-2">Submit Mission?</h3>
+                  <p className="text-brand-text-muted mb-8 text-lg">
+                    Are you sure you want to finalize this Web3 task? You'll earn 100 XP upon submission.
+                  </p>
+                  <div className="flex flex-col gap-3">
+                    <Button
+                      size="lg"
+                      className="w-full py-6 text-base font-bold rounded-xl shadow-lg shadow-brand-primary/20"
+                      onClick={handleCompleteLesson}
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? 'Submitting...' : 'Yes, Submit Mission'}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="lg"
+                      className="w-full py-6 text-base font-medium text-brand-text-muted hover:bg-gray-50 rounded-xl"
+                      onClick={() => setShowConfirmPopup(false)}
+                    >
+                      Wait, Not Yet
+                    </Button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </AnimatePresence>
       </div>
     );
@@ -243,11 +386,11 @@ export default function Learn() {
       const newUnlocked = [...(user.unlocked_modules || []), lesson.id];
       const newXp = user.xp - cost;
 
-      await updateDoc(userDocRef, { 
+      await updateDoc(userDocRef, {
         unlocked_modules: newUnlocked,
         xp: newXp
       });
-      
+
       setUser({
         ...user,
         unlocked_modules: newUnlocked,
@@ -259,7 +402,7 @@ export default function Learn() {
   };
 
   return (
-    <div className="max-w-[1000px] mx-auto px-8 py-16">
+    <div className="max-w-250 mx-auto px-8 py-16">
       <h1 className="text-4xl font-bold tracking-tight mb-2 text-brand-ink">Curriculum</h1>
       <p className="text-brand-text-muted mb-12">Spend XP to unlock advanced Web3 topics and continue your journey.</p>
 
@@ -267,50 +410,97 @@ export default function Learn() {
         {lessons.map((lesson, idx) => {
           const isCompleted = user?.completed_lessons.includes(lesson.id);
           const isUnlocked = user?.unlocked_modules?.includes(lesson.id) || idx === 0;
-          const unlockCost = 25 + (idx * 25); // Made lower for easier access
+          const unlockCost = 25 + (idx * 25);
 
-          return (
-            <Card
-              key={lesson.id}
-              className={cn(
-                "p-0 overflow-hidden flex flex-col md:flex-row group relative",
-                !isUnlocked ? "bg-gray-50/80" : "hover:border-brand-primary transition-all cursor-pointer"
-              )}
-              onClick={() => isUnlocked && setSelectedLesson(lesson)}
-            >
-              <div className={cn(
-                "w-full md:w-32 flex items-center justify-center py-10 md:py-0 transition-colors",
-                isCompleted ? "bg-green-50 text-brand-success" : !isUnlocked ? "bg-gray-100 text-gray-400" : "bg-gray-50 text-brand-ink group-hover:bg-indigo-50 group-hover:text-brand-primary"
-              )}>
-                {isCompleted ? <CheckCircle size={32} /> : !isUnlocked ? <LockIcon size={32} /> : <Play size={32} fill="currentColor" />}
-              </div>
-              <div className="p-8 flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                <div>
-                  <div className="flex items-center gap-3 mb-1.5">
-                     <h3 className={cn("text-xl font-bold", isUnlocked ? "text-brand-ink" : "text-gray-400")}>{lesson.title}</h3>
-                     {isCompleted && (
-                       <span className="text-[10px] bg-green-100 text-green-700 px-3 py-1 rounded-full font-bold uppercase tracking-widest shadow-sm">Finished</span>
-                     )}
-                     {!isUnlocked && (
-                       <span className="text-[10px] bg-gray-200 text-gray-500 px-3 py-1 rounded-full font-bold uppercase tracking-widest shadow-sm">Locked</span>
-                     )}
+          if (idx < 5) {
+            return (
+              <Link to={`/learnx/${idx}`}>
+                <Card
+                  key={lesson.id}
+                  className={cn(
+                    "p-0 overflow-hidden flex flex-col md:flex-row group relative",
+                    !isUnlocked ? "bg-gray-50/80" : "hover:border-brand-primary transition-all cursor-pointer"
+                  )}
+                  onClick={() => isUnlocked && setSelectedLesson(lesson)}
+                >
+                  <div className={cn(
+                    "w-full md:w-32 flex items-center justify-center py-10 md:py-0 transition-colors",
+                    isCompleted ? "bg-green-50 text-brand-success" : !isUnlocked ? "bg-gray-100 text-gray-400" : "bg-gray-50 text-brand-ink group-hover:bg-indigo-50 group-hover:text-brand-primary"
+                  )}>
+                    {isCompleted ? <CheckCircle size={32} /> : !isUnlocked ? <LockIcon size={32} /> : <Play size={32} fill="currentColor" />}
                   </div>
-                  <p className={cn("text-sm leading-relaxed", isUnlocked ? "text-brand-text-muted" : "text-gray-400")}>{lesson.description}</p>
-                </div>
-                
-                {!isUnlocked && (
-                  <Button 
-                    variant={user && user.xp >= unlockCost ? "default" : "outline"} 
-                    disabled={!user || user.xp < unlockCost}
-                    onClick={(e) => handleUnlock(lesson, unlockCost, e)}
-                    className="whitespace-nowrap"
-                  >
-                    Unlock • {unlockCost} XP
-                  </Button>
+                  <div className="p-8 flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                    <div>
+                      <div className="flex items-center gap-3 mb-1.5">
+                        <h3 className={cn("text-xl font-bold", isUnlocked ? "text-brand-ink" : "text-gray-400")}>{lesson.title}</h3>
+                        {isCompleted && (
+                          <span className="text-[10px] bg-green-100 text-green-700 px-3 py-1 rounded-full font-bold uppercase tracking-widest shadow-sm">Finished</span>
+                        )}
+                        {!isUnlocked && (
+                          <span className="text-[10px] bg-gray-200 text-gray-500 px-3 py-1 rounded-full font-bold uppercase tracking-widest shadow-sm">Locked</span>
+                        )}
+                      </div>
+                      <p className={cn("text-sm leading-relaxed", isUnlocked ? "text-brand-text-muted" : "text-gray-400")}>{lesson.description}</p>
+                    </div>
+
+                    {!isUnlocked && (
+                      <Button
+                        variant={user && user.xp >= unlockCost ? "primary" : "outline"}
+                        disabled={!user || user.xp < unlockCost}
+                        onClick={(e) => handleUnlock(lesson, unlockCost, e)}
+                        className="whitespace-nowrap"
+                      >
+                        Unlock • {unlockCost} XP
+                      </Button>
+                    )}
+                  </div>
+                </Card>
+              </Link>
+            );
+          } else {
+            return (
+              <Card
+                key={lesson.id}
+                className={cn(
+                  "p-0 overflow-hidden flex flex-col md:flex-row group relative",
+                  !isUnlocked ? "bg-gray-50/80" : "hover:border-brand-primary transition-all cursor-pointer"
                 )}
-              </div>
-            </Card>
-          );
+                onClick={() => isUnlocked && setSelectedLesson(lesson)}
+              >
+                <div className={cn(
+                  "w-full md:w-32 flex items-center justify-center py-10 md:py-0 transition-colors",
+                  isCompleted ? "bg-green-50 text-brand-success" : !isUnlocked ? "bg-gray-100 text-gray-400" : "bg-gray-50 text-brand-ink group-hover:bg-indigo-50 group-hover:text-brand-primary"
+                )}>
+                  {isCompleted ? <CheckCircle size={32} /> : !isUnlocked ? <LockIcon size={32} /> : <Play size={32} fill="currentColor" />}
+                </div>
+                <div className="p-8 flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                  <div>
+                    <div className="flex items-center gap-3 mb-1.5">
+                      <h3 className={cn("text-xl font-bold", isUnlocked ? "text-brand-ink" : "text-gray-400")}>{lesson.title}</h3>
+                      {isCompleted && (
+                        <span className="text-[10px] bg-green-100 text-green-700 px-3 py-1 rounded-full font-bold uppercase tracking-widest shadow-sm">Finished</span>
+                      )}
+                      {!isUnlocked && (
+                        <span className="text-[10px] bg-gray-200 text-gray-500 px-3 py-1 rounded-full font-bold uppercase tracking-widest shadow-sm">Locked</span>
+                      )}
+                    </div>
+                    <p className={cn("text-sm leading-relaxed", isUnlocked ? "text-brand-text-muted" : "text-gray-400")}>{lesson.description}</p>
+                  </div>
+
+                  {!isUnlocked && (
+                    <Button
+                      variant={user && user.xp >= unlockCost ? "primary" : "outline"}
+                      disabled={!user || user.xp < unlockCost}
+                      onClick={(e) => handleUnlock(lesson, unlockCost, e)}
+                      className="whitespace-nowrap"
+                    >
+                      Unlock • {unlockCost} XP
+                    </Button>
+                  )}
+                </div>
+              </Card>
+            )
+          }
         })}
       </div>
     </div>
