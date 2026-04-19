@@ -19,7 +19,7 @@ export const config = getDefaultConfig({
   projectId: 'YOUR_PROJECT_ID', // User should ideally provide this, but we can't block. 
   // In a real app, users would set up WalletConnect Cloud.
   chains: [sepolia, polygonMumbai],
-  ssr: true, 
+  ssr: true,
 });
 
 export const queryClient = new QueryClient();

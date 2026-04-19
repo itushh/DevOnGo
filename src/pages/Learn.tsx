@@ -12,6 +12,8 @@ import { CheckCircle, Lock, Play, ArrowLeft, ArrowRight, Sparkles, Wallet } from
 import { cn } from '@/src/utils/utils';
 import { unlockAchievement } from '@/src/services/achievementsService';
 import { Web3TaskRegistry } from '@/src/components/web3-tasks/TaskRegistry';
+import { markModuleOnBlockchain } from '@/src/services/blockchainService';
+import { toast } from 'sonner';
 
 export default function Learn() {
   const [selectedLesson, setSelectedLesson] = useState<Lesson | null>(null);
@@ -21,6 +23,7 @@ export default function Learn() {
   const [isLocked, setIsLocked] = useState(false);
   const [showTask, setShowTask] = useState(false);
   const [lessonComplete, setLessonComplete] = useState(false);
+  const [isBlockchainProcessing, setIsBlockchainProcessing] = useState(false);
 
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
 
@@ -36,24 +39,42 @@ export default function Learn() {
 
   const handleCompleteLesson = async () => {
     if (!user || !selectedLesson) return;
-    
+
     const isAlreadyCompleted = user.completed_lessons?.includes(selectedLesson.id) || false;
-    const newCompleted = isAlreadyCompleted 
-      ? (user.completed_lessons || []) 
+
+    // Blockchain progress recording - only for new completions
+    if (!isAlreadyCompleted) {
+      setIsBlockchainProcessing(true);
+      const toastId = toast.loading("Recording progress on HeLa Blockchain...");
+      try {
+        const username = user.username || user.display_name || user.email?.split('@')[0] || "explorer";
+        await markModuleOnBlockchain(username, selectedLesson.title);
+        toast.success("Progress recorded on blockchain!", { id: toastId });
+      } catch (blockchainError: any) {
+        console.error('Blockchain recording failed:', blockchainError);
+        toast.error(`Blockchain Error: ${blockchainError.message || "Failed to record progress"}`, { id: toastId });
+        // Don't stop the flow, but notify user
+      } finally {
+        setIsBlockchainProcessing(false);
+      }
+    }
+
+    const newCompleted = isAlreadyCompleted
+      ? (user.completed_lessons || [])
       : [...(user.completed_lessons || []), selectedLesson.id];
-    
+
     const xpReward = isAlreadyCompleted ? 0 : 100;
     const newXp = user.xp + xpReward;
     const newLevel = Math.floor(newXp / 1000) + 1;
 
     try {
       const userDocRef = doc(db, 'users', user.id);
-      await updateDoc(userDocRef, { 
+      await updateDoc(userDocRef, {
         completed_lessons: newCompleted,
         xp: newXp,
         level: newLevel
       });
-      
+
       setUser({
         ...user,
         completed_lessons: newCompleted,
@@ -80,6 +101,7 @@ export default function Learn() {
       }
     } catch (error) {
       console.error('Error updating lesson progress:', error);
+      toast.error("Failed to save progress locally.");
     }
   };
 
@@ -123,7 +145,7 @@ export default function Learn() {
                 correctIdx={isLocked ? question.correctIndex : undefined}
                 isLocked={isLocked}
               />
-              
+
               {isLocked && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.95 }}
@@ -149,94 +171,94 @@ export default function Learn() {
             </motion.div>
           ) : showTask && !lessonComplete ? (
             <motion.div
-               key="task"
-               initial={{ opacity: 0, x: 20 }}
-               animate={{ opacity: 1, x: 0 }}
-               className="space-y-8"
+              key="task"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="space-y-8"
             >
-               <Card className="p-10 border-2 border-dashed border-indigo-200 bg-indigo-50/20 shadow-inner">
-                  <div className="flex items-center gap-3 mb-6 text-brand-primary">
-                    <Sparkles size={28} className="animate-pulse" />
-                    <h2 className="text-xl font-black uppercase tracking-widest">Web3 Mission</h2>
-                  </div>
-                  <h3 className="text-3xl font-bold mb-3 text-brand-ink">{selectedLesson.web3Task?.title}</h3>
-                  <p className="text-lg text-brand-text-muted mb-10 leading-relaxed">{selectedLesson.web3Task?.description}</p>
-                  
-                  <div className="space-y-4 mb-10">
-                    <div className="text-xs font-bold text-brand-text-muted uppercase tracking-widest mb-4">Step-by-Step Instructions</div>
-                    {selectedLesson.web3Task?.steps.map((step, idx) => (
-                      <div 
-                        key={idx} 
-                        onClick={() => toggleStep(idx)}
-                        className={cn(
-                          "flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer",
-                          completedSteps.includes(idx) 
-                            ? "bg-green-50 border-brand-success text-brand-ink" 
-                            : "bg-white border-brand-border hover:border-indigo-200"
-                        )}
-                      >
-                         <div className={cn(
-                           "w-6 h-6 rounded-md flex items-center justify-center border-2 transition-colors",
-                           completedSteps.includes(idx) ? "bg-brand-success border-brand-success text-white" : "border-gray-200"
-                         )}>
-                            {completedSteps.includes(idx) && <CheckCircle size={14} />}
-                         </div>
-                         <span className="text-sm font-semibold">{step}</span>
-                      </div>
-                    ))}
-                  </div>
+              <Card className="p-10 border-2 border-dashed border-indigo-200 bg-indigo-50/20 shadow-inner">
+                <div className="flex items-center gap-3 mb-6 text-brand-primary">
+                  <Sparkles size={28} className="animate-pulse" />
+                  <h2 className="text-xl font-black uppercase tracking-widest">Web3 Mission</h2>
+                </div>
+                <h3 className="text-3xl font-bold mb-3 text-brand-ink">{selectedLesson.web3Task?.title}</h3>
+                <p className="text-lg text-brand-text-muted mb-10 leading-relaxed">{selectedLesson.web3Task?.description}</p>
 
-                  {selectedLesson.web3Task && Web3TaskRegistry[selectedLesson.web3Task.type] && (
-                    <div className="mb-10 p-6 bg-white rounded-2xl border border-indigo-100 shadow-sm">
-                       {(() => {
-                         const TaskComponent = Web3TaskRegistry[selectedLesson.web3Task.type];
-                         return <TaskComponent />;
-                       })()}
-                    </div>
-                  )}
-
-                  <div className="bg-white p-10 rounded-2xl border border-indigo-100 shadow-xl text-center">
-                     <div className="w-16 h-16 bg-indigo-50 text-brand-primary rounded-full flex items-center justify-center mx-auto mb-6">
-                        <Wallet size={32} />
-                     </div>
-                     <p className={cn(
-                       "text-xs font-bold mb-6 uppercase tracking-widest",
-                       isTaskReady ? "text-brand-success" : "text-brand-text-muted opacity-50"
-                     )}>
-                        {isTaskReady ? 'System Ready: Proceed to Execution' : `Complete ${selectedLesson.web3Task?.steps.length! - completedSteps.length} more steps`}
-                     </p>
-                     <Button 
-                      size="xl" 
-                      className="w-full md:w-auto px-16 shadow-lg shadow-indigo-200" 
-                      onClick={() => handleCompleteLesson()}
-                      disabled={!isTaskReady}
+                <div className="space-y-4 mb-10">
+                  <div className="text-xs font-bold text-brand-text-muted uppercase tracking-widest mb-4">Step-by-Step Instructions</div>
+                  {selectedLesson.web3Task?.steps.map((step, idx) => (
+                    <div
+                      key={idx}
+                      onClick={() => toggleStep(idx)}
+                      className={cn(
+                        "flex items-center gap-4 p-4 rounded-xl border-2 transition-all cursor-pointer",
+                        completedSteps.includes(idx)
+                          ? "bg-green-50 border-brand-success text-brand-ink"
+                          : "bg-white border-brand-border hover:border-indigo-200"
+                      )}
                     >
-                        Execute Mission
-                     </Button>
+                      <div className={cn(
+                        "w-6 h-6 rounded-md flex items-center justify-center border-2 transition-colors",
+                        completedSteps.includes(idx) ? "bg-brand-success border-brand-success text-white" : "border-gray-200"
+                      )}>
+                        {completedSteps.includes(idx) && <CheckCircle size={14} />}
+                      </div>
+                      <span className="text-sm font-semibold">{step}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {selectedLesson.web3Task && Web3TaskRegistry[selectedLesson.web3Task.type] && (
+                  <div className="mb-10 p-6 bg-white rounded-2xl border border-indigo-100 shadow-sm">
+                    {(() => {
+                      const TaskComponent = Web3TaskRegistry[selectedLesson.web3Task.type];
+                      return <TaskComponent />;
+                    })()}
                   </div>
-               </Card>
+                )}
+
+                <div className="bg-white p-10 rounded-2xl border border-indigo-100 shadow-xl text-center">
+                  <div className="w-16 h-16 bg-indigo-50 text-brand-primary rounded-full flex items-center justify-center mx-auto mb-6">
+                    <Wallet size={32} />
+                  </div>
+                  <p className={cn(
+                    "text-xs font-bold mb-6 uppercase tracking-widest",
+                    isTaskReady ? "text-brand-success" : "text-brand-text-muted opacity-50"
+                  )}>
+                    {isTaskReady ? 'System Ready: Proceed to Execution' : `Complete ${selectedLesson.web3Task?.steps.length! - completedSteps.length} more steps`}
+                  </p>
+                  <Button
+                    size="xl"
+                    className="w-full md:w-auto px-16 shadow-lg shadow-indigo-200"
+                    onClick={() => handleCompleteLesson()}
+                    disabled={!isTaskReady}
+                  >
+                    Execute Mission
+                  </Button>
+                </div>
+              </Card>
             </motion.div>
           ) : (
             <motion.div
-               key="complete"
-               initial={{ opacity: 0, scale: 0.9 }}
-               animate={{ opacity: 1, scale: 1 }}
-               className="text-center py-20"
+              key="complete"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="text-center py-20"
             >
-               <div className="w-24 h-24 bg-brand-success/10 text-brand-success rounded-full flex items-center justify-center mx-auto mb-8 relative">
-                  <CheckCircle size={48} />
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1.5, opacity: 0 }}
-                    transition={{ duration: 1, repeat: Infinity }}
-                    className="absolute inset-0 bg-brand-success/20 rounded-full"
-                  />
-               </div>
-               <h2 className="text-5xl font-black mb-3 uppercase tracking-tighter text-brand-ink">Lesson Complete!</h2>
-               <p className="text-lg text-brand-text-muted mb-12">+100 XP awarded to your profile</p>
-               <Button size="xl" className="px-12 py-8 text-xl rounded-2xl" onClick={() => setSelectedLesson(null)}>
-                  Keep Exploring
-               </Button>
+              <div className="w-24 h-24 bg-brand-success/10 text-brand-success rounded-full flex items-center justify-center mx-auto mb-8 relative">
+                <CheckCircle size={48} />
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1.5, opacity: 0 }}
+                  transition={{ duration: 1, repeat: Infinity }}
+                  className="absolute inset-0 bg-brand-success/20 rounded-full"
+                />
+              </div>
+              <h2 className="text-5xl font-black mb-3 uppercase tracking-tighter text-brand-ink">Lesson Complete!</h2>
+              <p className="text-lg text-brand-text-muted mb-12">+100 XP awarded to your profile</p>
+              <Button size="xl" className="px-12 py-8 text-xl rounded-2xl" onClick={() => setSelectedLesson(null)}>
+                Keep Exploring
+              </Button>
             </motion.div>
           )}
         </AnimatePresence>
@@ -253,11 +275,11 @@ export default function Learn() {
       const newUnlocked = [...(user.unlocked_modules || []), lesson.id];
       const newXp = user.xp - cost;
 
-      await updateDoc(userDocRef, { 
+      await updateDoc(userDocRef, {
         unlocked_modules: newUnlocked,
         xp: newXp
       });
-      
+
       setUser({
         ...user,
         unlocked_modules: newUnlocked,
@@ -308,20 +330,20 @@ export default function Learn() {
               <div className="p-8 flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                 <div>
                   <div className="flex items-center gap-3 mb-1.5">
-                     <h3 className={cn("text-xl font-bold", isUnlocked ? "text-brand-ink" : "text-gray-400")}>{lesson.title}</h3>
-                     {isCompleted && (
-                       <span className="text-[10px] bg-green-100 text-green-700 px-3 py-1 rounded-full font-bold uppercase tracking-widest shadow-sm">Finished</span>
-                     )}
-                     {!isUnlocked && (
-                       <span className="text-[10px] bg-gray-200 text-gray-500 px-3 py-1 rounded-full font-bold uppercase tracking-widest shadow-sm">Locked</span>
-                     )}
+                    <h3 className={cn("text-xl font-bold", isUnlocked ? "text-brand-ink" : "text-gray-400")}>{lesson.title}</h3>
+                    {isCompleted && (
+                      <span className="text-[10px] bg-green-100 text-green-700 px-3 py-1 rounded-full font-bold uppercase tracking-widest shadow-sm">Finished</span>
+                    )}
+                    {!isUnlocked && (
+                      <span className="text-[10px] bg-gray-200 text-gray-500 px-3 py-1 rounded-full font-bold uppercase tracking-widest shadow-sm">Locked</span>
+                    )}
                   </div>
                   <p className={cn("text-sm leading-relaxed", isUnlocked ? "text-brand-text-muted" : "text-gray-400")}>{lesson.description}</p>
                 </div>
-                
+
                 {!isUnlocked && (
-                  <Button 
-                    variant={user && user.xp >= unlockCost ? "default" : "outline"} 
+                  <Button
+                    variant={user && user.xp >= unlockCost ? "default" : "outline"}
                     disabled={!user || user.xp < unlockCost}
                     onClick={(e) => handleUnlock(lesson, unlockCost, e)}
                     className="whitespace-nowrap"

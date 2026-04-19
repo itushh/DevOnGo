@@ -3,14 +3,13 @@ import { db, auth } from '@/src/services/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
 import { useUser } from '@/src/hooks/useUser';
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { useAccount } from 'wagmi';
+import { useHelaWallet } from '@/src/hooks/useHelaWallet';
 import { Button } from './Button';
-import { LogOut, Moon, Sun } from 'lucide-react';
+import { LogOut, Moon, Sun, Wallet } from 'lucide-react';
 
 export const Navbar = () => {
   const { user, setUser } = useUser();
-  const { address } = useAccount();
+  const { account, connect, loading, error } = useHelaWallet();
   const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains('dark'));
 
   const toggleDark = () => {
@@ -24,15 +23,19 @@ export const Navbar = () => {
   };
 
   useEffect(() => {
-    if (address && user && user.wallet_address !== address) {
+    if (account && user && user.wallet_address !== account) {
       const userDocRef = doc(db, 'users', user.id);
-      updateDoc(userDocRef, { wallet_address: address }).then(() => {
-        setUser({ ...user, wallet_address: address });
+      updateDoc(userDocRef, { wallet_address: account }).then(() => {
+        setUser({ ...user, wallet_address: account });
       });
     }
-  }, [address, user, setUser]);
+  }, [account, user, setUser]);
 
   const handleSignOut = () => signOut(auth);
+
+  const formatAddress = (addr: string) => {
+    return `${addr.substring(0, 6)}...${addr.substring(addr.length - 4)}`;
+  };
 
   return (
     <header className="h-[72px] bg-brand-sidebar border-bottom border-brand-border flex items-center justify-between px-8 shrink-0 border-b">
@@ -45,7 +48,7 @@ export const Navbar = () => {
 
       <div className="flex items-center gap-6">
         <Button variant="ghost" size="sm" onClick={toggleDark} className="w-8 h-8 p-0 rounded-full text-brand-text-muted hover:text-brand-ink">
-           {isDark ? <Sun size={18} /> : <Moon size={18} />}
+          {isDark ? <Sun size={18} /> : <Moon size={18} />}
         </Button>
         <div className="hidden lg:flex items-center gap-4">
           <div className="flex items-center gap-2 bg-brand-bg px-3 py-1.5 rounded-full text-xs font-bold font-mono border border-brand-border">
@@ -59,8 +62,23 @@ export const Navbar = () => {
         </div>
 
         <div className="flex items-center gap-4 pl-6 border-l border-brand-border">
-          <ConnectButton showBalance={false} chainStatus="none" accountStatus="avatar" />
-          
+          {account ? (
+            <div className="flex items-center gap-2 bg-brand-bg px-4 py-2 rounded-lg border border-brand-border">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              <span className="text-xs font-mono text-brand-ink">{formatAddress(account)}</span>
+            </div>
+          ) : (
+            <Button
+              size="sm"
+              onClick={connect}
+              disabled={loading}
+              className="flex items-center gap-2 bg-brand-accent hover:bg-brand-accent/90 text-white"
+            >
+              <Wallet size={16} />
+              {loading ? "Connecting..." : "Connect Hela"}
+            </Button>
+          )}
+
           {user ? (
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="sm" onClick={handleSignOut} className="w-8 h-8 p-0 border border-brand-border rounded-full hover:bg-brand-bg text-brand-text-muted hover:text-brand-ink">
