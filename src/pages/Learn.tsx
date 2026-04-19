@@ -412,7 +412,7 @@ export default function Learn() {
           const isUnlocked = user?.unlocked_modules?.includes(lesson.id) || idx === 0;
           const unlockCost = 25 + (idx * 25);
 
-          if (idx < 5) {
+          if (idx < -1) {
             return (
               <Link to={`/learnx/${idx}`}>
                 <Card
